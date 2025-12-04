@@ -12,7 +12,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
 	import * as NativeSelect from '$lib/components/ui/native-select';
-	import { Loader2, Send, Search, Plus, Trash2, Save } from 'lucide-svelte';
+	import { Loader2, Send, Search, Plus, Trash2, Save, X } from 'lucide-svelte';
 	import { env } from '$env/dynamic/public';
 	import { contractAddresses } from '$lib/contracts';
 	import { onMount } from 'svelte';
@@ -95,6 +95,15 @@
 			}
 		} catch (error) {
 			console.error('Failed to load transactions:', error);
+		}
+	}
+
+	function clearLocalStorage() {
+		try {
+			localStorage.removeItem(STORAGE_KEY);
+			toast.success('Local storage cleared successfully!');
+		} catch (error) {
+			toast.error(`Failed to clear storage: ${error}`);
 		}
 	}
 
@@ -295,6 +304,15 @@
 						</p>
 					</div>
 					<div class="flex gap-2">
+						<Button
+							onclick={clearLocalStorage}
+							size="sm"
+							variant="outline"
+							class="gap-2"
+						>
+							<X class="h-4 w-4" />
+							Clear
+						</Button>
 						<Button onclick={saveTransactions} size="sm" variant="outline" class="gap-2">
 							<Save class="h-4 w-4" />
 							Save
@@ -355,11 +373,28 @@
 							<div class="space-y-2">
 								<Label for={`to-${i}`} class="text-sm font-medium">
 									To Address
-									<span class="text-xs text-muted-foreground ml-1">
+									<div class="flex items-center">
+										<span class="text-xs text-muted-foreground ml-1">
 										{tx.selectedContract === ''
 											? '(Enter custom address)'
 											: '(Auto-filled from contract)'}
-									</span>
+										</span>
+										<span class="ml-2 text-xs text-blue-600">
+											{#if tx.selectedContract !== ''}
+												<a
+													href={
+														contractAddresses.find(
+															(c) => c.address === tx.selectedContract
+														)?.link || '#'
+													}
+													target="_blank"
+													rel="noopener noreferrer"
+												>
+													Visit Page
+												</a>
+											{/if}
+										</span>
+									</div>
 								</Label>
 								<div class="relative">
 									<Input
