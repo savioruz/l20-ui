@@ -1,5 +1,9 @@
 export const contractAddresses = [
 	{
+		name: 'Custom Address (Enter manually below)',
+		address: ''
+	},
+	{
 		name: 'Vault',
 		address: '0x53d4299c9e8e2a7a6ed1811a10da67d6795bf412'
 	},
@@ -14,9 +18,5 @@ export const contractAddresses = [
 	{
 		name: 'Zombie',
 		address: '0x7462af1b5a2a53f4305b8ea7fc60b6464260aa1e'
-	},
-	{
-		name: 'Custom Address (Enter manually below)',
-		address: ''
 	}
 ];
