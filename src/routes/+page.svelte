@@ -10,16 +10,18 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import { Alert, AlertDescription } from '$lib/components/ui/alert';
+	import { toast } from 'svelte-sonner';
 	import * as NativeSelect from '$lib/components/ui/native-select';
-	import { Loader2, Send, Search, Plus, Trash2 } from 'lucide-svelte';
+	import { Loader2, Send, Search, Plus, Trash2, Save } from 'lucide-svelte';
 	import { env } from '$env/dynamic/public';
 	import { contractAddresses } from '$lib/contracts';
+	import { onMount } from 'svelte';
 
 	type Transaction = {
 		to: string;
 		data: string;
 		value: string;
+		count: number;
 		selectedContract: string;
 	};
 
@@ -28,7 +30,7 @@
 	let privateKey = $state('');
 	let rpc = $state('https://rpc.linea.build');
 	let transactions = $state<Transaction[]>([
-		{ to: '', data: '0x', value: '0', selectedContract: contractAddresses[0].address }
+		{ to: '', data: '0x', value: '0', count: 1, selectedContract: contractAddresses[0].address }
 	]);
 	type JobStatus = {
 		id?: string;
@@ -55,13 +57,51 @@
 	let jobId = $state('');
 	let isSubmitting = $state(false);
 	let isCheckingStatus = $state(false);
-	let submitResult = $state<{ success: boolean; message: string; jobId?: string } | null>(null);
 	let jobStatus = $state<JobStatus | null>(null);
+
+	const STORAGE_KEY = 'l20ui_transactions';
+
+	onMount(() => {
+		loadTransactions();
+	});
+
+	function saveTransactions() {
+		try {
+			const dataToSave = {
+				apiUrl,
+				apiKey,
+				rpc,
+				transactions
+			};
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+			toast.success('Transactions saved successfully!');
+		} catch (error) {
+			toast.error(`Failed to save: ${error}`);
+		}
+	}
+
+	function loadTransactions() {
+		try {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const data = JSON.parse(saved);
+				if (data.apiUrl) apiUrl = data.apiUrl;
+				if (data.apiKey) apiKey = data.apiKey;
+				if (data.rpc) rpc = data.rpc;
+				if (data.transactions && Array.isArray(data.transactions)) {
+					transactions = data.transactions;
+				}
+				toast.success('Transactions loaded from storage');
+			}
+		} catch (error) {
+			console.error('Failed to load transactions:', error);
+		}
+	}
 
 	function addTransaction() {
 		transactions = [
 			...transactions,
-			{ to: '', data: '0x', value: '0', selectedContract: contractAddresses[0].address }
+			{ to: '', data: '0x', value: '0', count: 1, selectedContract: contractAddresses[0].address }
 		];
 	}
 
@@ -81,27 +121,23 @@
 
 	async function submitBatchTransactions() {
 		isSubmitting = true;
-		submitResult = null;
 
 		try {
 			// Validate transactions
 			if (transactions.length === 0) {
-				submitResult = { success: false, message: 'Please add at least one transaction' };
+				toast.error('Please add at least one transaction');
 				return;
 			}
 
 			// Check if all transactions have required fields
 			const invalidTx = transactions.findIndex((tx) => !tx.to.trim() || !tx.data.trim());
 			if (invalidTx !== -1) {
-				submitResult = {
-					success: false,
-					message: `Transaction #${invalidTx + 1} is missing required fields (to, data)`
-				};
+				toast.error(`Transaction #${invalidTx + 1} is missing required fields (to, data)`);
 				return;
 			}
 
 			if (!privateKey.trim()) {
-				submitResult = { success: false, message: 'Please enter your private key' };
+				toast.error('Please enter your private key');
 				return;
 			}
 
@@ -109,7 +145,8 @@
 			const txPayload = transactions.map((tx) => ({
 				to: tx.to,
 				data: tx.data,
-				value: tx.value
+				value: tx.value,
+				count: tx.count
 			}));
 
 			const response = await fetch(`${apiUrl}/interact/batch-send-raw`, {
@@ -128,23 +165,27 @@
 			const data = await response.json();
 
 			if (response.ok) {
-				submitResult = {
-					success: true,
-					message: data.message || 'Batch submitted successfully!',
-					jobId: data.jobId
-				};
 				if (data.jobId) {
 					jobId = data.jobId;
+					toast.success(`Batch submitted successfully! Job ID: ${data.jobId}`);
+				} else {
+					toast.success(data.message || 'Batch submitted successfully!');
 				}
 				// Reset transactions to single empty one
 				transactions = [
-					{ to: '', data: '0x', value: '0', selectedContract: contractAddresses[0].address }
+					{
+						to: '',
+						data: '0x',
+						value: '0',
+						count: 1,
+						selectedContract: contractAddresses[0].address
+					}
 				];
 			} else {
-				submitResult = { success: false, message: data.error || 'Failed to submit batch' };
+				toast.error(data.error || 'Failed to submit batch');
 			}
 		} catch (error) {
-			submitResult = { success: false, message: `Error: ${error}` };
+			toast.error(`Error: ${error}`);
 		} finally {
 			isSubmitting = false;
 		}
@@ -229,7 +270,7 @@
 			<CardTitle>Batch Send Raw Transactions</CardTitle>
 			<CardDescription>
 				Build and send multiple transactions in batch. Each transaction requires a destination
-				address, data, and value.
+				address, data, value, and repeat count.
 			</CardDescription>
 		</CardHeader>
 		<CardContent class="space-y-4">
@@ -246,17 +287,23 @@
 
 			<!-- Transactions List -->
 			<div class="space-y-4">
-				<div class="flex items-center justify-between py-2">
+				<div class="flex items-center justify-between py-2 flex-wrap gap-2">
 					<div>
 						<Label class="text-base">Transactions</Label>
 						<p class="text-xs text-muted-foreground mt-1">
 							Build your transaction batch ({transactions.length} total)
 						</p>
 					</div>
-					<Button onclick={addTransaction} size="sm" variant="outline" class="gap-2">
-						<Plus class="h-4 w-4" />
-						Add Transaction
-					</Button>
+					<div class="flex gap-2">
+						<Button onclick={saveTransactions} size="sm" variant="outline" class="gap-2">
+							<Save class="h-4 w-4" />
+							Save
+						</Button>
+						<Button onclick={addTransaction} size="sm" variant="outline" class="gap-2">
+							<Plus class="h-4 w-4" />
+							Add Transaction
+						</Button>
+					</div>
 				</div>
 
 				{#each transactions as tx, i (`tx-${i}-${tx.selectedContract}`)}
@@ -355,19 +402,36 @@
 								/>
 							</div>
 
-							<div class="space-y-2">
-								<Label for={`value-${i}`} class="text-sm font-medium">
-									Value
-									<span class="text-xs text-muted-foreground ml-1">(ETH)</span>
-								</Label>
-								<Input
-									id={`value-${i}`}
-									type="number"
-									step="0.000001"
-									bind:value={tx.value}
-									placeholder="0.0"
-									class="text-sm w-1/2 md:w-1/4"
-								/>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+								<div class="space-y-2">
+									<Label for={`value-${i}`} class="text-sm font-medium">
+										Value
+										<span class="text-xs text-muted-foreground ml-1">(ETH)</span>
+									</Label>
+									<Input
+										id={`value-${i}`}
+										type="number"
+										step="0.000001"
+										bind:value={tx.value}
+										placeholder="0.0"
+										class="text-sm"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for={`count-${i}`} class="text-sm font-medium">
+										Count
+										<span class="text-xs text-muted-foreground ml-1">(Repeats)</span>
+									</Label>
+									<Input
+										id={`count-${i}`}
+										type="number"
+										min="1"
+										step="1"
+										bind:value={tx.count}
+										placeholder="1"
+										class="text-sm"
+									/>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -388,19 +452,6 @@
 					Submit Batch ({transactions.length} transaction{transactions.length !== 1 ? 's' : ''})
 				{/if}
 			</Button>
-
-			{#if submitResult}
-				<Alert variant={submitResult.success ? 'default' : 'destructive'}>
-					<AlertDescription>
-						{submitResult.message}
-						{#if submitResult.jobId}
-							<br />
-							<strong>Job ID:</strong>
-							<code class="rounded bg-gray-100 px-2 py-1">{submitResult.jobId}</code>
-						{/if}
-					</AlertDescription>
-				</Alert>
-			{/if}
 		</CardContent>
 	</Card>
 
@@ -441,9 +492,9 @@
 			{#if jobStatus}
 				<div class="mt-4 space-y-3 rounded-lg border p-4">
 					{#if jobStatus.error}
-						<Alert variant="destructive">
-							<AlertDescription>{jobStatus.error}</AlertDescription>
-						</Alert>
+						<div class="text-destructive text-sm font-medium">
+							Error: {jobStatus.error}
+						</div>
 					{:else}
 						<div>
 							<span class="font-semibold">Job ID:</span>
