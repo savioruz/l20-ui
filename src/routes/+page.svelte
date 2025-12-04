@@ -311,7 +311,6 @@
 							class="gap-2"
 						>
 							<X class="h-4 w-4" />
-							Clear
 						</Button>
 						<Button onclick={saveTransactions} size="sm" variant="outline" class="gap-2">
 							<Save class="h-4 w-4" />
