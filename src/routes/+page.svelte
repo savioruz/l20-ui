@@ -243,7 +243,7 @@
 </script>
 
 <div class="container mx-auto max-w-4xl p-6">
-	<h1 class="mb-8 text-3xl font-bold">l2-ui</h1>
+	<h1 class="mb-8 text-3xl font-bold">l20-ui</h1>
 
 	<!-- API Configuration -->
 	<Card class="mb-6">
